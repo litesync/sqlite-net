@@ -2084,6 +2084,20 @@ namespace SQLite
 			}
 		}
 
+
+		/// <summary>
+		/// Calls a function whenever the database receives a sync/update
+		/// ex: db.OnSync(() => { /* your code here */ });
+		/// </summary>
+		/// <param name="Invoke">Your function definition</param>
+		public void OnSync(Action Invoke)
+		{
+			SQLite3.CreateFunction(Handle, "update_notification", 0, 1, IntPtr.Zero,
+								   new SQLite3.SQLiteCallback((c, cnt, args) => Invoke()),
+								   null, null);
+		}
+
+
 		~SQLiteConnection ()
 		{
 			Dispose (false);
@@ -4400,6 +4414,13 @@ namespace SQLite
 
 		[DllImport(LibraryPath, EntryPoint = "sqlite3_win32_set_directory", CallingConvention=CallingConvention.Cdecl, CharSet=CharSet.Unicode)]
 		public static extern int SetDirectory (uint directoryType, string directoryPath);
+
+
+		public delegate void SQLiteCallback(IntPtr context, int nArgs, IntPtr argsptr);
+		public delegate void SQLiteFinalCallback(IntPtr context);
+		[DllImport(LibraryPath, EntryPoint = "sqlite3_create_function", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
+		public static extern int CreateFunction(IntPtr db, [MarshalAs(UnmanagedType.LPStr)] string strName, int nArgs, int nType, IntPtr pvUser, SQLiteCallback func, SQLiteCallback fstep, SQLiteFinalCallback ffinal);
+
 
 		[DllImport(LibraryPath, EntryPoint = "sqlite3_busy_timeout", CallingConvention=CallingConvention.Cdecl)]
 		public static extern Result BusyTimeout (IntPtr db, int milliseconds);
