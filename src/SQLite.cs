@@ -226,12 +226,6 @@ namespace SQLite
 		/// <value>The date time style.</value>
 		internal System.Globalization.DateTimeStyles DateTimeStyle { get; private set; }
 
-#if USE_SQLITEPCL_RAW && !NO_SQLITEPCL_RAW_BATTERIES
-		static SQLiteConnection ()
-		{
-			SQLitePCL.Batteries_V2.Init ();
-		}
-#endif
 
 		/// <summary>
 		/// Constructs a new SQLiteConnection and opens a SQLite database specified by databasePath.
