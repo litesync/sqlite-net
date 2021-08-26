@@ -49,6 +49,7 @@ using Sqlite3DatabaseHandle = SQLitePCL.sqlite3;
 using Sqlite3BackupHandle = SQLitePCL.sqlite3_backup;
 using Sqlite3Statement = SQLitePCL.sqlite3_stmt;
 using Sqlite3 = SQLitePCL.raw;
+using System.Threading.Tasks;
 #else
 using Sqlite3DatabaseHandle = System.IntPtr;
 using Sqlite3BackupHandle = System.IntPtr;
@@ -2078,25 +2079,79 @@ namespace SQLite
 			}
 		}
 
+		private void ExecuteInMainContext(SynchronizationContext context, Action action)
+		{
+#if __MOBILE__
+            Xamarin.Forms.Device.BeginInvokeOnMainThread(action);
+#else
+			if (context != null)
+			{
+				context.Post(_ => action(), null);
+			}
+			else
+				Task.Factory.StartNew(action);
+
+			/*  or this block:
+			var scheduler = TaskScheduler.FromCurrentSynchronizationContext();
+			Task task = new Task(action);
+			if (scheduler != null)
+				task.Start(scheduler);
+			else
+				task.Start();
+			*/
+#endif
+		}
+
+		public bool IsReady()
+        {
+			var status = ExecuteScalar<string>("pragma sync_status");
+			Console.WriteLine(status);
+			return status.Contains("\"db_is_ready\": true");
+		}
+
+		/// <summary>
+		/// Calls a function when the database becomes ready
+		/// ex: db.OnReady(() => { /* your code here */ });
+		/// </summary>
+		/// <param name="callback">Your method definition</param>
+		public void OnReady(Action callback)
+		{
+			var context = SynchronizationContext.Current;
+#if USE_SQLITEPCL_RAW
+			Sqlite3.sqlite3_create_function(Handle, "ready_notification", 0, 1, IntPtr.Zero,
+								   new SQLitePCL.delegate_function_scalar((c, cnt, args) =>	{
+									   ExecuteInMainContext(context, callback);
+								   }));
+#else
+			SQLite3.CreateFunction(Handle, "ready_notification", 0, 1, IntPtr.Zero,
+								   new SQLite3.SQLiteCallback((c, cnt, args) => {
+									   ExecuteInMainContext(context, callback);
+								   }),
+								   null, null);
+#endif
+		}
 
 		/// <summary>
 		/// Calls a function whenever the database receives a sync/update
 		/// ex: db.OnSync(() => { /* your code here */ });
 		/// </summary>
-		/// <param name="Invoke">Your function definition</param>
-		public void OnSync(Action Invoke)
+		/// <param name="callback">Your method definition</param>
+		public void OnSync(Action callback)
 		{
+			var context = SynchronizationContext.Current;
 #if USE_SQLITEPCL_RAW
 			Sqlite3.sqlite3_create_function(Handle, "sync_notification", 0, 1, IntPtr.Zero,
-								   new SQLitePCL.delegate_function_scalar((c, cnt, args) => Invoke())
-								   );
+								   new SQLitePCL.delegate_function_scalar((c, cnt, args) => {
+									   ExecuteInMainContext(context, callback);
+								   }));
 #else
 			SQLite3.CreateFunction(Handle, "sync_notification", 0, 1, IntPtr.Zero,
-								   new SQLite3.SQLiteCallback((c, cnt, args) => Invoke()),
+								   new SQLite3.SQLiteCallback((c, cnt, args) => {
+									   ExecuteInMainContext(context, callback);
+								   }),
 								   null, null);
 #endif
 		}
-
 
 		~SQLiteConnection ()
 		{
@@ -4371,7 +4426,7 @@ namespace SQLite
 		}
 
 
-#if iOS
+#if __IOS__
 		const string LibraryPath = "__Internal";
 #else
 		const string LibraryPath = "litesync";
