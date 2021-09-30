@@ -2140,12 +2140,12 @@ namespace SQLite
 		{
 			var context = SynchronizationContext.Current;
 #if USE_SQLITEPCL_RAW
-			Sqlite3.sqlite3_create_function(Handle, "sync_notification", 0, 1, IntPtr.Zero,
+			Sqlite3.sqlite3_create_function(Handle, "update_notification", 1, 1, IntPtr.Zero,
 								   new SQLitePCL.delegate_function_scalar((c, cnt, args) => {
 									   ExecuteInMainContext(context, callback);
 								   }));
 #else
-			SQLite3.CreateFunction(Handle, "sync_notification", 0, 1, IntPtr.Zero,
+			SQLite3.CreateFunction(Handle, "update_notification", 1, 1, IntPtr.Zero,
 								   new SQLite3.SQLiteCallback((c, cnt, args) => {
 									   ExecuteInMainContext(context, callback);
 								   }),
@@ -4330,6 +4330,7 @@ namespace SQLite
 			return Where (predExpr).FirstOrDefault ();
 		}
 	}
+
 
 	public static class SQLite3
 	{
