@@ -67,6 +67,12 @@ var databasePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFol
 var uri = "file:" + databasePath + "?node=secondary&connect=tcp://123.45.67.89:1234";
 var db = new SQLiteConnection(uri);
 
+// wait until the db is ready
+while (!db.IsReady()) {
+    System.Threading.Thread.Sleep(250);
+}
+
+// now we can use the database
 db.CreateTable<Stock>(CreateFlags.AutoIncPK);
 db.CreateTable<Valuation>(CreateFlags.AutoIncPK);
 ```
@@ -134,9 +140,24 @@ var databasePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFol
 var uri = "file:" + databasePath + "?node=secondary&connect=tcp://123.45.67.89:1234";
 var db = new SQLiteAsyncConnection(uri);
 
-await db.CreateTableAsync<Stock>(CreateFlags.AutoIncPK);
+if (db.IsReady())
+{
+    // the database is ready to be accessed
+    InitDatabase(db);
+}
+else
+{
+    // wait until the db is ready (and do not access the database)
+    db.OnReady(() => {
+        // the database is ready to be accessed
+        InitDatabase(db);
+    });
+}
 
-Console.WriteLine("Table created!");
+void InitDatabase(SQLiteAsyncConnection db) {
+    await db.CreateTableAsync<Stock>(CreateFlags.AutoIncPK);
+    await db.CreateTableAsync<Valuation>(CreateFlags.AutoIncPK);
+}
 ```
 
 LiteSync does not support the `AutoIncrement` keyword, but we can pass the `AutoIncPK` flag when creating a table.
@@ -178,6 +199,18 @@ Another helpful method is `ExecuteScalarAsync`. This allows you to return a scal
 var count = await db.ExecuteScalarAsync<int>("select count(*) from Stock");
 
 Console.WriteLine(string.Format("Found '{0}' stock items.", count));
+```
+
+
+## Sync Notifications
+
+Your application can receive a notification when the database receives a sync/update
+
+```csharp
+db.OnSync(() => {
+    // the db received an update. update the screen with new data
+    UpdateScreen(db);
+});
 ```
 
 
