@@ -77,6 +77,27 @@ db.CreateTable<Stock>(CreateFlags.AutoIncPK);
 db.CreateTable<Valuation>(CreateFlags.AutoIncPK);
 ```
 
+Instead of waiting until the database is ready for access we can use an event notification:
+
+```csharp
+if (db.IsReady()) {
+    // the database is ready to be accessed
+    StartDbAccess(db);
+} else {
+    // wait until the db is ready (and do not access the database)
+    db.OnReady(() => {
+        // the database is ready to be accessed
+        StartDbAccess(db);
+    });
+}
+
+void StartDbAccess(SQLiteConnection db) {
+    db.CreateTable<Stock>(CreateFlags.AutoIncPK);
+    db.CreateTable<Valuation>(CreateFlags.AutoIncPK);
+    ...
+}
+```
+
 LiteSync does not support the `AutoIncrement` keyword, but we can pass the `AutoIncPK` flag when creating a table.
 
 You can insert rows in the database using `Insert`. If the table contains an auto-incremented primary key, then the value for that key will be available to you after the insert:
@@ -140,13 +161,10 @@ var databasePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFol
 var uri = "file:" + databasePath + "?node=secondary&connect=tcp://123.45.67.89:1234";
 var db = new SQLiteAsyncConnection(uri);
 
-if (db.IsReady())
-{
+if (db.IsReady()) {
     // the database is ready to be accessed
     InitDatabase(db);
-}
-else
-{
+} else {
     // wait until the db is ready (and do not access the database)
     db.OnReady(() => {
         // the database is ready to be accessed
