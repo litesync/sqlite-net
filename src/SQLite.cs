@@ -30,6 +30,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 #endif
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Reflection;
 using System.Linq;
 using System.Linq.Expressions;
@@ -49,7 +50,6 @@ using Sqlite3DatabaseHandle = SQLitePCL.sqlite3;
 using Sqlite3BackupHandle = SQLitePCL.sqlite3_backup;
 using Sqlite3Statement = SQLitePCL.sqlite3_stmt;
 using Sqlite3 = SQLitePCL.raw;
-using System.Threading.Tasks;
 #else
 using Sqlite3DatabaseHandle = System.IntPtr;
 using Sqlite3BackupHandle = System.IntPtr;
@@ -2079,33 +2079,69 @@ namespace SQLite
 			}
 		}
 
+		private class ConsoleSynchronizationContext : SynchronizationContext
+		{
+			private readonly BlockingCollection<KeyValuePair<SendOrPostCallback, object>> _queue =
+				new BlockingCollection<KeyValuePair<SendOrPostCallback, object>>();
+
+			public override void Send(SendOrPostCallback d, object state)
+			{
+				d(state);
+			}
+
+			public override void Post(SendOrPostCallback d, object state)
+			{
+				_queue.Add(new KeyValuePair<SendOrPostCallback, object>(d, state));
+			}
+
+			public void RunOnCurrentThread()
+			{
+				KeyValuePair<SendOrPostCallback, object> workItem;
+				while (_queue.TryTake(out workItem, Timeout.Infinite)) {
+					workItem.Key(workItem.Value);
+				}
+			}
+		}
+
+		private SynchronizationContext GetCurrentSynchronizationContext()
+    {
+			var context = SynchronizationContext.Current;
+			if (context == null) {
+				context = new ConsoleSynchronizationContext();
+				SynchronizationContext.SetSynchronizationContext(context);
+			}
+			return context;
+		}
+
+		public void WaitForEvents()  // it could also listen on UDP
+		{
+			var context = GetCurrentSynchronizationContext();
+			if (context != null && context is ConsoleSynchronizationContext) {
+				ConsoleSynchronizationContext consoleContext = (ConsoleSynchronizationContext)context;
+				consoleContext.RunOnCurrentThread();
+			} else {
+				while (true) { System.Threading.Thread.Sleep(1000); }
+			}
+		}
+
 		private void ExecuteInMainContext(SynchronizationContext context, Action action)
 		{
 #if __MOBILE__
-            Xamarin.Forms.Device.BeginInvokeOnMainThread(action);
+			Xamarin.Forms.Device.BeginInvokeOnMainThread(action);
 #else
 			if (context != null)
 			{
-				context.Post(_ => action(), null);
+				//context.Post(_ => action(), null);
+				context.Post(delegate { action(); }, null);
 			}
 			else
-				Task.Factory.StartNew(action);
-
-			/*  or this block:
-			var scheduler = TaskScheduler.FromCurrentSynchronizationContext();
-			Task task = new Task(action);
-			if (scheduler != null)
-				task.Start(scheduler);
-			else
-				task.Start();
-			*/
+				System.Threading.Tasks.Task.Factory.StartNew(action);
 #endif
 		}
 
 		public bool IsReady()
-        {
+		{
 			var status = ExecuteScalar<string>("pragma sync_status");
-			Console.WriteLine(status);
 			return status.Contains("\"db_is_ready\": true");
 		}
 
@@ -2116,7 +2152,11 @@ namespace SQLite
 		/// <param name="callback">Your method definition</param>
 		public void OnReady(Action callback)
 		{
-			var context = SynchronizationContext.Current;
+			if (IsReady()) {
+				callback();
+				return;
+			}
+			var context = GetCurrentSynchronizationContext();
 #if USE_SQLITEPCL_RAW
 			Sqlite3.sqlite3_create_function(Handle, "ready_notification", 0, 1, IntPtr.Zero,
 								   new SQLitePCL.delegate_function_scalar((c, cnt, args) =>	{
@@ -2138,7 +2178,7 @@ namespace SQLite
 		/// <param name="callback">Your method definition</param>
 		public void OnSync(Action callback)
 		{
-			var context = SynchronizationContext.Current;
+			var context = GetCurrentSynchronizationContext();
 #if USE_SQLITEPCL_RAW
 			Sqlite3.sqlite3_create_function(Handle, "update_notification", 1, 1, IntPtr.Zero,
 								   new SQLitePCL.delegate_function_scalar((c, cnt, args) => {
