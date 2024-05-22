@@ -2171,23 +2171,53 @@ namespace SQLite
 #endif
 		}
 
+		public delegate void UpdateNotificationCallback(string changes);
 		/// <summary>
 		/// Calls a function whenever the database receives a sync/update
-		/// ex: db.OnSync(() => { /* your code here */ });
+		/// ex: db.OnSync((changes) => { /* your code here */ });
 		/// </summary>
 		/// <param name="callback">Your method definition</param>
-		public void OnSync(Action callback)
+		public void OnSync(UpdateNotificationCallback callback)
 		{
 			var context = GetCurrentSynchronizationContext();
 #if USE_SQLITEPCL_RAW
 			Sqlite3.sqlite3_create_function(Handle, "update_notification", 1, 1, IntPtr.Zero,
 								   new SQLitePCL.delegate_function_scalar((c, cnt, args) => {
-									   ExecuteInMainContext(context, callback);
+									   string changes = SQLite3.ValueString(args, 0);
+									   ExecuteInMainContext(context, callback, changes);
 								   }));
 #else
 			SQLite3.CreateFunction(Handle, "update_notification", 1, 1, IntPtr.Zero,
 								   new SQLite3.SQLiteCallback((c, cnt, args) => {
-									   ExecuteInMainContext(context, callback);
+									   string changes = SQLite3.ValueString(args, 0);
+									   ExecuteInMainContext(context, callback, changes);
+								   }),
+								   null, null);
+#endif
+		}
+
+		public delegate void TransactionNotificationCallback(string sql, string result);
+		/// <summary>
+		/// Calls a function whenever the database receives a sync/update
+		/// ex: db.OnTransactionSync((sql, result) => { /* your code here */ });
+		/// </summary>
+		/// <param name="callback">Your method definition</param>
+		public void OnTransactionSync(TransactionNotificationCallback callback)
+		{
+			var context = GetCurrentSynchronizationContext();
+#if USE_SQLITEPCL_RAW
+			Sqlite3.sqlite3_create_function(Handle, "transaction_notification", 2, 1, IntPtr.Zero,
+								   new SQLitePCL.delegate_function_scalar((c, cnt, args) => {
+									   string sql = SQLite3.ValueString(args, 0);
+									   string result = SQLite3.ValueString(args, 1);
+									   ExecuteInMainContext(context, callback, sql, result);
+								   }));
+#else
+			SQLite3.CreateFunction(Handle, "transaction_notification", 2, 1, IntPtr.Zero,
+								   new SQLite3.SQLiteCallback((ctx, cnt, args) => {
+									   string sql = SQLite3.ValueString(args, 0);
+									   string result = SQLite3.ValueString(args, 1);
+									   ExecuteInMainContext(context, callback, sql, result);
 								   }),
 								   null, null);
 #endif
@@ -4517,6 +4547,14 @@ namespace SQLite
 		[DllImport(LibraryPath, EntryPoint = "sqlite3_create_function", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
 		public static extern int CreateFunction(IntPtr db, [MarshalAs(UnmanagedType.LPStr)] string strName, int nArgs, int nType, IntPtr pvUser, SQLiteCallback func, SQLiteCallback fstep, SQLiteFinalCallback ffinal);
 
+		[DllImport(LibraryPath, EntryPoint = "sqlite3_value_text", CallingConvention = CallingConvention.Cdecl)]
+		public static extern IntPtr sqlite3_value_text(IntPtr value);
+
+		public static string ValueString(IntPtr args, int index) {
+			IntPtr valuePtr = Marshal.ReadIntPtr(args, index * IntPtr.Size);
+			IntPtr ptr = sqlite3_value_text(valuePtr);
+			return Marshal.PtrToStringAnsi(ptr);
+		}
 
 		[DllImport(LibraryPath, EntryPoint = "sqlite3_busy_timeout", CallingConvention=CallingConvention.Cdecl)]
 		public static extern Result BusyTimeout (IntPtr db, int milliseconds);
