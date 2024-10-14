@@ -2184,13 +2184,13 @@ namespace SQLite
 			Sqlite3.sqlite3_create_function(Handle, "update_notification", 1, 1, IntPtr.Zero,
 								   new SQLitePCL.delegate_function_scalar((c, cnt, args) => {
 									   string changes = SQLite3.ValueString(args, 0);
-									   ExecuteInMainContext(context, callback, changes);
+									   ExecuteInMainContext(context, () => callback(changes));
 								   }));
 #else
 			SQLite3.CreateFunction(Handle, "update_notification", 1, 1, IntPtr.Zero,
 								   new SQLite3.SQLiteCallback((c, cnt, args) => {
 									   string changes = SQLite3.ValueString(args, 0);
-									   ExecuteInMainContext(context, callback, changes);
+									   ExecuteInMainContext(context, () => callback(changes));
 								   }),
 								   null, null);
 #endif
@@ -2210,14 +2210,14 @@ namespace SQLite
 								   new SQLitePCL.delegate_function_scalar((c, cnt, args) => {
 									   string sql = SQLite3.ValueString(args, 0);
 									   string result = SQLite3.ValueString(args, 1);
-									   ExecuteInMainContext(context, callback, sql, result);
+									   ExecuteInMainContext(context, () => callback(sql, result));
 								   }));
 #else
 			SQLite3.CreateFunction(Handle, "transaction_notification", 2, 1, IntPtr.Zero,
 								   new SQLite3.SQLiteCallback((ctx, cnt, args) => {
 									   string sql = SQLite3.ValueString(args, 0);
 									   string result = SQLite3.ValueString(args, 1);
-									   ExecuteInMainContext(context, callback, sql, result);
+									   ExecuteInMainContext(context, () => callback(sql, result));
 								   }),
 								   null, null);
 #endif
