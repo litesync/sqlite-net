@@ -4551,9 +4551,11 @@ namespace SQLite
 		public static extern IntPtr sqlite3_value_text(IntPtr value);
 
 		public static string ValueString(IntPtr args, int index) {
+			if (args == IntPtr.Zero) return null;
 			IntPtr valuePtr = Marshal.ReadIntPtr(args, index * IntPtr.Size);
-			IntPtr ptr = sqlite3_value_text(valuePtr);
-			return Marshal.PtrToStringAnsi(ptr);
+			if (valuePtr == IntPtr.Zero) return null;
+			IntPtr ptr = sqlite3_value_text16(valuePtr);
+			return ptr == IntPtr.Zero ? null : Marshal.PtrToStringUni(ptr);
 		}
 
 		[DllImport(LibraryPath, EntryPoint = "sqlite3_busy_timeout", CallingConvention=CallingConvention.Cdecl)]
@@ -4883,6 +4885,13 @@ namespace SQLite
 				return ColumnBlob (stmt, index);
 			}
 			return new byte[0];
+		}
+
+		public static string ValueString(IntPtr args, int index) {
+			if (args == IntPtr.Zero) return null;
+			IntPtr valuePtr = Marshal.ReadIntPtr(args, index * IntPtr.Size);
+			if (valuePtr == IntPtr.Zero) return null;
+			return Sqlite3.sqlite3_value_text(valuePtr).utf8_to_string();
 		}
 
 		public static Result EnableLoadExtension (Sqlite3DatabaseHandle db, int onoff)
