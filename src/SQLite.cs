@@ -2183,7 +2183,7 @@ namespace SQLite
 #if USE_SQLITEPCL_RAW
 			Sqlite3.sqlite3_create_function(Handle, "update_notification", 1, 1, IntPtr.Zero,
 								   new SQLitePCL.delegate_function_scalar((c, cnt, args) => {
-									   string changes = SQLite3.ValueString(args, 0);
+									   string changes = SQLite3.ValueString(args[0]);
 									   ExecuteInMainContext(context, () => callback(changes));
 								   }));
 #else
@@ -2208,8 +2208,8 @@ namespace SQLite
 #if USE_SQLITEPCL_RAW
 			Sqlite3.sqlite3_create_function(Handle, "transaction_notification", 2, 1, IntPtr.Zero,
 								   new SQLitePCL.delegate_function_scalar((c, cnt, args) => {
-									   string sql = SQLite3.ValueString(args, 0);
-									   string result = SQLite3.ValueString(args, 1);
+									   string sql = SQLite3.ValueString(args[0]);
+									   string result = SQLite3.ValueString(args[1]);
 									   ExecuteInMainContext(context, () => callback(sql, result));
 								   }));
 #else
@@ -4887,11 +4887,8 @@ namespace SQLite
 			return new byte[0];
 		}
 
-		public static string ValueString(IntPtr args, int index) {
-			if (args == IntPtr.Zero) return null;
-			IntPtr valuePtr = Marshal.ReadIntPtr(args, index * IntPtr.Size);
-			if (valuePtr == IntPtr.Zero) return null;
-			return Sqlite3.sqlite3_value_text(valuePtr).utf8_to_string();
+		public static string ValueString(sqlite3_value value) {
+			return Sqlite3.sqlite3_value_text(value).utf8_to_string();
 		}
 
 		public static Result EnableLoadExtension (Sqlite3DatabaseHandle db, int onoff)
